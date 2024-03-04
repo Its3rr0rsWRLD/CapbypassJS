@@ -1,0 +1,28 @@
+{
+  "name": "capbypassjs",
+  "version": "1.0.0",
+  "description": "NodeJS wrapper for CapBypass (capbypass.com)",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Its3rr0rsWRLD/CapbypassJS.git"
+  },
+  "keywords": [
+    "captcha",
+    "capbypass",
+    "roblox",
+    "bypass"
+  ],
+  "author": "Its3rr0rsWRLD",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Its3rr0rsWRLD/CapbypassJS/issues"
+  },
+  "homepage": "https://github.com/Its3rr0rsWRLD/CapbypassJS#readme"
+}
