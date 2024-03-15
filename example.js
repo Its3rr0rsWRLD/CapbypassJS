@@ -1,31 +1,18 @@
-const CapBypassWrapped = require('./CapBypassWrapped');
+const CapBypassWrapped = require('capbypassjs');
 
-// Replace 'your_client_key' with your actual client key
-const clientKey = 'your_client_key';
+// Initialize CapBypass with your API key
+const capBypass = new CapBypassWrapped('YOUR_API_KEY');
 
-// Create an instance of CapBypassWrapped
-const capBypass = new CapBypassWrapped(clientKey);
+// Example: Create and get the result of a FunCaptcha task
+async function bypassFunCaptcha() {
+    const taskType = 'FunCaptchaTaskProxyLess';
+    const websiteUrl = 'https://example.com';
+    const websitePubKey = 'FUN_CAPTCHA_PUBLIC_KEY';
+    const websiteSubdomain = 'api-secure.funcaptcha.com';
+    const proxy = 'http://username:password@proxy.example.com:8080';
 
-// Example usage
-(async () => {
-    // Create a task
-    const taskResponse = await capBypass.createTask(
-        "FunCaptchaTaskProxyLess", // Task type
-        "https://example.com",     // Website URL
-        "example_public_key",      // Website public key
-        "example_subdomain",       // FunCaptcha API JS subdomain
-        "http://username:password@proxy.example.com:1234" // Proxy
-    );
+    const taskResult = await capBypass.createAndGetTaskResult(taskType, websiteUrl, websitePubKey, websiteSubdomain, proxy);
+    console.log('Task Result:', taskResult);
+}
 
-    console.log("Task creation response:", taskResponse);
-
-    if (taskResponse && taskResponse.taskId) {
-        // Get task result
-        const taskResult = await capBypass.getTaskResult(taskResponse.taskId);
-        console.log("Task result:", taskResult);
-    }
-
-    // Get account balance
-    const balance = await capBypass.getBalance();
-    console.log("Account balance:", balance);
-})();
+bypassFunCaptcha();
