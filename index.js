@@ -1,25 +1,24 @@
 const axios = require('axios');
+const { URLSearchParams } = require('url');
+const { format } = require('util');
 
 const BASE_URL = "https://capbypass.com/api";
 
 class CapBypassWrapped {
-    constructor(clientKey, verbal = false, customHttpClient = null) {
+    constructor(clientKey, verbal = false) {
         this.clientKey = clientKey;
         this.verbal = verbal;
-        this.customHttpClient = customHttpClient || axios;
     }
 
-    async makeRequest(url, method, data) {
+    async makeRequest(url, method, data = null) {
         try {
-            const response = await this.customHttpClient({
+            const response = await axios({
+                method: method.toLowerCase(),
                 url: url,
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
                 data: data
             });
             return response.data;
         } catch (error) {
-            console.error("Error making request:", error);
             return {
                 errorCode: error.response.status,
                 errorDescription: error.response.statusText
@@ -31,11 +30,11 @@ class CapBypassWrapped {
         const regex = /(?:https?:\/\/)?(?:(?<username>\S+):(?<password>\S+)@)?(?<hostname>\S+):(?<port>\S+)/;
         const match = proxy.match(regex);
         if (match) {
-            let formattedString = `${match.groups.hostname}`;
-            if (match.groups.port) formattedString += `:${match.groups.port}`;
-            if (match.groups.username) formattedString += `@${match.groups.username}`;
-            if (match.groups.password) formattedString += `:${match.groups.password}`;
-            return formattedString;
+            let formattedProxy = match.groups.hostname;
+            if (match.groups.port) formattedProxy += `:${match.groups.port}`;
+            if (match.groups.username) formattedProxy += `@${match.groups.username}`;
+            if (match.groups.password) formattedProxy += `:${match.groups.password}`;
+            return formattedProxy;
         } else {
             return null;
         }
@@ -43,69 +42,98 @@ class CapBypassWrapped {
 
     async createTask(taskType, websiteUrl, websitePubKey, websiteSubdomain, proxy, blob = null) {
         const url = `${BASE_URL}/createTask`;
-        if (taskType === "FunCaptchaTask" || taskType === "FunCaptchaTaskProxyLess") {
-            const dumpedBlob = JSON.stringify({ blob: blob });
-            proxy = this.formatProxy(proxy);
-            const response = await this.makeRequest(url, "POST", {
-                clientKey: this.clientKey,
-                task: {
-                    type: "FunCaptchaTaskProxyLess",
-                    websiteURL: websiteUrl,
-                    websitePublicKey: websitePubKey,
-                    funcaptchaApiJSSubdomain: websiteSubdomain,
-                    data: dumpedBlob,
-                    proxy: proxy
-                }
-            });
-            if (response.status_code === 200) {
-                if (this.verbal) console.log("FunCaptchaTask created successfully");
-                return { taskId: response.taskId };
-            } else {
-                if (this.verbal) console.warn("FunCaptchaTask failed to create");
-                return {
-                    errorCode: response.status_code,
-                    errorDescription: response.text
-                };
+        const dumpedBlob = JSON.stringify({ blob: blob });
+        const formattedProxy = this.formatProxy(proxy);
+        const requestData = {
+            clientKey: this.clientKey,
+            task: {
+                type: taskType,
+                websiteURL: websiteUrl,
+                websitePublicKey: websitePubKey,
+                funcaptchaApiJSSubdomain: websiteSubdomain,
+                data: dumpedBlob,
+                proxy: formattedProxy
             }
-        } else {
-            if (this.verbal) console.warn("Invalid task type");
-            return null;
-        }
+        };
+        return await this.makeRequest(url, 'POST', requestData);
     }
 
-    async getTaskResult(taskId) {
+    async getResult(taskId) {
         const url = `${BASE_URL}/getTaskResult`;
-        const response = await this.makeRequest(url, "POST", {
+        const requestData = {
             clientKey: this.clientKey,
             taskId: taskId
-        });
-        if (response.status_code === 200) {
-            if (this.verbal) console.log("Task result retrieved successfully");
-            return response.json();
-        } else {
-            if (this.verbal) console.warn("Task result retrieval failed");
-            return {
-                errorCode: response.status_code,
-                errorDescription: response.text
-            };
-        }
+        };
+        return await this.makeRequest(url, 'POST', requestData);
     }
 
     async getBalance() {
         const url = `${BASE_URL}/getBalance`;
-        const response = await this.makeRequest(url, "POST", {
+        const requestData = {
             clientKey: this.clientKey
-        });
-        if (response.status_code === 200) {
-            if (this.verbal) console.log("Balance retrieved successfully");
-            return response.json();
+        };
+        return await this.makeRequest(url, 'POST', requestData);
+    }
+
+    async createAndGetResult(taskType, websiteUrl, websitePubKey, websiteSubdomain, proxy, blob = null, delay = 5) {
+        const task = await this.createTask(taskType, websiteUrl, websitePubKey, websiteSubdomain, proxy, blob);
+        if (task.taskId) {
+            const start = Date.now();
+            while (true) {
+                const taskResult = await this.getResult(task.taskId);
+                if (taskResult.status === 'READY') {
+                    taskResult.time = (Date.now() - start) / 1000;
+                    return taskResult;
+                } else if ((Date.now() - start) > 200000) {
+                    return { errorCode: 400, errorDescription: 'Task took too long to complete' };
+                }
+                await new Promise(resolve => setTimeout(resolve, delay * 1000));
+            }
         } else {
-            if (this.verbal) console.warn("Balance retrieval failed");
-            return {
-                errorCode: response.status_code,
-                errorDescription: response.text
-            };
+            return task;
         }
+    }
+
+    async createClassificationTask(taskType, image, question) {
+        const url = `${BASE_URL}/createTask`;
+        const check = this.isBase64Encoded(image);
+        if (!check) {
+            if (this.verbal) console.warn('Image is not base64 encoded');
+            return { errorCode: 1, errorDescription: 'Image is not base64 encoded' };
+        }
+        const requestData = {
+            clientKey: this.clientKey,
+            task: {
+                type: taskType,
+                image: image,
+                question: question
+            }
+        };
+        return await this.makeRequest(url, 'POST', requestData);
+    }
+
+    async createAndGetClassificationResult(taskType, image, question, delay = 5) {
+        const task = await this.createClassificationTask(taskType, image, question);
+        if (task.taskId) {
+            const start = Date.now();
+            while (true) {
+                const taskResult = await this.getResult(task.taskId);
+                if (taskResult.status === 'READY') {
+                    taskResult.time = (Date.now() - start) / 1000;
+                    return taskResult;
+                } else if ((Date.now() - start) > 200000) {
+                    return { errorCode: 400, errorDescription: 'Task took too long to complete' };
+                }
+                await new Promise(resolve => setTimeout(resolve, delay * 1000));
+            }
+        } else {
+            return task;
+        }
+    }
+
+    isBase64Encoded(str) {
+        const regex = /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;
+        return regex.test(str);
     }
 }
 
